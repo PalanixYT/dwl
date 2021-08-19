@@ -180,7 +180,15 @@ struct Monitor {
 	double mfact;
 	int nmaster;
 };
-
+struct dnd_drag_icon {
+	struct wl_list link;
+	struct wlr_drag_icon *wlr_drag_icon;
+	double lx, ly;
+	struct wl_listener request_start_drag;
+	struct wl_listener start_drag;
+	struct wl_listener destroy;
+};
+struct wl_list drag_icons;
 typedef struct {
 	const char *name;
 	float mfact;
@@ -302,6 +310,9 @@ static struct wlr_surface *xytolayersurface(struct wl_list *layer_surfaces,
 static Monitor *xytomon(double x, double y);
 static void zoom(const Arg *arg);
 
+static void drag_icon_destroy(struct wl_listener *listener, void *data);
+static void handle_request_start_drag(struct wl_listener *listener, void *data);
+static void handle_start_drag(struct wl_listener *listener, void *data);
 /* variables */
 static const char broken[] = "broken";
 static struct wl_display *dpy;
@@ -323,12 +334,9 @@ static struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_mgr;
 
 static struct wlr_cursor *cursor;
 static struct wlr_xcursor_manager *cursor_mgr;
-#ifdef XWAYLAND
-static struct wlr_xcursor *xcursor;
-static struct wlr_xcursor_manager *xcursor_mgr;
-#endif
 
 static struct wlr_seat *seat;
+static struct dnd_drag_icon *dnd;
 static struct wl_list keyboards;
 static unsigned int cursor_mode;
 static Client *grabc;
@@ -357,6 +365,10 @@ static struct wl_listener request_activate = {.notify = urgent};
 static struct wl_listener request_cursor = {.notify = setcursor};
 static struct wl_listener request_set_psel = {.notify = setpsel};
 static struct wl_listener request_set_sel = {.notify = setsel};
+
+static struct wl_listener request_start_drag = {.notify = handle_request_start_drag};
+static struct wl_listener start_drag = {.notify = handle_start_drag};
+static struct wl_listener destroy_drag_icon = {.notify = drag_icon_destroy};
 
 #ifdef XWAYLAND
 static void activatex11(struct wl_listener *listener, void *data);
@@ -618,6 +630,70 @@ arrangelayers(Monitor *m)
 			}
 		}
 	}
+}
+
+static void
+drag_icon_update_position(void)
+{
+	fprintf(stderr, "drag wird bewegt");
+
+
+	switch (dnd->wlr_drag_icon->drag->grab_type) {
+			case WLR_DRAG_GRAB_KEYBOARD_TOUCH:
+			case WLR_DRAG_GRAB_KEYBOARD:
+					return;
+			case WLR_DRAG_GRAB_KEYBOARD_POINTER:
+					dnd->lx = cursor->x;
+					dnd->ly = cursor->y;
+					break;
+	}
+	fprintf(stderr, "%f, %f", dnd->lx, dnd->ly);
+}
+static void
+drag_icon_destroy(struct wl_listener *listener, void *data)
+{
+		fprintf(stderr, "destroy does get called");
+		wl_list_remove(&dnd->link);
+		fprintf(stderr, "first remove is successfull");
+		dnd->wlr_drag_icon = NULL;
+		free(dnd);
+		dnd->wlr_drag_icon = NULL;
+		fprintf(stderr, "free is succesfull");
+}
+static void
+handle_request_start_drag(struct wl_listener *listener, void *data)
+{
+		struct wlr_seat_request_start_drag_event *event = data;
+		fprintf(stderr,"request is made");
+
+		if (wlr_seat_validate_pointer_grab_serial(seat, event->origin, event->serial)) {
+				wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
+				return;
+		}
+
+		wlr_data_source_destroy(event->drag->source);
+
+		fprintf(stderr,"fail");
+}
+static void
+handle_start_drag(struct wl_listener *listener, void *data)
+{
+		struct wlr_drag *wlr_drag = data;
+		struct wlr_drag_icon *wlr_drag_icon = wlr_drag->icon;
+		fprintf(stderr,"drag startet");
+
+		if (wlr_drag_icon == NULL)
+				return;
+
+		dnd->wlr_drag_icon = wlr_drag_icon;
+
+		wl_signal_add(&wlr_drag_icon->events.destroy, &destroy_drag_icon);
+
+		wl_list_insert(&drag_icons, &dnd->link);
+
+		drag_icon_update_position();
+
+		fprintf(stderr,"bis zum ende");
 }
 
 void
@@ -1412,6 +1488,10 @@ motionnotify(uint32_t time)
 				"left_ptr", cursor);
 
 	pointerfocus(c, surface, sx, sy, time);
+	//wl_list_for_each (dnd, &drag_icons, link) {
+	if(dnd->wlr_drag_icon != NULL)
+			drag_icon_update_position();
+	//}
 }
 
 void
@@ -2097,7 +2177,6 @@ setup(void)
 	wl_signal_add(&cursor->events.button, &cursor_button);
 	wl_signal_add(&cursor->events.axis, &cursor_axis);
 	wl_signal_add(&cursor->events.frame, &cursor_frame);
-
 	/*
 	 * Configures a seat, which is a single "seat" at which a user sits and
 	 * operates the computer. This conceptually includes up to one keyboard,
@@ -2110,6 +2189,7 @@ setup(void)
 	wl_signal_add(&virtual_keyboard_mgr->events.new_virtual_keyboard,
 			&new_virtual_keyboard);
 	seat = wlr_seat_create(dpy, "seat0");
+	dnd = calloc(1, sizeof(struct dnd_drag_icon));
 	wl_signal_add(&seat->events.request_set_cursor,
 			&request_cursor);
 	wl_signal_add(&seat->events.request_set_selection,
@@ -2120,6 +2200,10 @@ setup(void)
 	output_mgr = wlr_output_manager_v1_create(dpy);
 	wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
 	wl_signal_add(&output_mgr->events.test, &output_mgr_test);
+
+	wl_list_init(&drag_icons);
+	wl_signal_add(&seat->events.request_start_drag, &request_start_drag);
+	wl_signal_add(&seat->events.start_drag, &start_drag);
 
 	presentation = wlr_presentation_create(dpy, backend);
 
