@@ -262,6 +262,7 @@ static void destroysessionlock(struct wl_listener *listener, void *data);
 static void destroysessionmgr(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
 static void focusclient(Client *c, int lift);
+static void focusmaster(const Arg *arg);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
 static Client *focustop(Monitor *m);
@@ -1238,6 +1239,13 @@ focusclient(Client *c, int lift)
 	client_activate_surface(client_surface(c), 1);
 }
 
+void
+focusmaster(const Arg *arg)
+{
+	Client *c;
+	c = wl_container_of(clients.next, c, link);
+	focusclient(c, 0);
+}
 void
 focusmon(const Arg *arg)
 {
