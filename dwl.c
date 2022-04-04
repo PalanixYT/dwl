@@ -207,6 +207,10 @@ typedef struct {
 	const Layout *lt;
 	enum wl_output_transform rr;
 	int x, y;
+	int resx;
+	int resy;
+	float rate;
+	int adaptive;
 } MonitorRule;
 
 typedef struct {
@@ -882,15 +886,16 @@ createmon(struct wl_listener *listener, void *data)
 			wlr_output_state_set_transform(&state, r->rr);
 			m->m.x = r->x;
 			m->m.y = r->y;
+
+			wlr_output_state_set_custom_mode(&state, r->resx, r->resy,
+			r->rate > 0 ? (int)(r->rate * 1000) : 0);
+
+			wlr_output_state_set_adaptive_sync_enabled(&state, r->adaptive);
 			break;
 		}
 	}
 
-	/* The mode is a tuple of (width, height, refresh rate), and each
-	 * monitor supports only a specific set of modes. We just pick the
-	 * monitor's preferred mode; a more sophisticated compositor would let
-	 * the user configure it. */
-	wlr_output_state_set_mode(&state, wlr_output_preferred_mode(wlr_output));
+	wlr_output_init_render(wlr_output, alloc, drw);
 
 	/* Set up event listeners */
 	LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
