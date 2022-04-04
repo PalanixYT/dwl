@@ -44,7 +44,7 @@ pointer-constraints-unstable-v1-protocol.c:
 	$(WAYLAND_SCANNER) private-code \
 		$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml $@
 
-pointer-constraints-unstable-v1-protocol.o: pointer-constraints-unstable-v1-protocol.o
+pointer-constraints-unstable-v1-protocol.o: pointer-constraints-unstable-v1-protocol.h
 
 
 wlr-layer-shell-unstable-v1-protocol.h:
