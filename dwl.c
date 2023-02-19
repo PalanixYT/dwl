@@ -267,6 +267,7 @@ static void focusstack(const Arg *arg);
 static Client *focustop(Monitor *m);
 static void fullscreennotify(struct wl_listener *listener, void *data);
 static void handlesig(int signo);
+static void hidecursor(int hide);
 static void incnmaster(const Arg *arg);
 static void inputdevice(struct wl_listener *listener, void *data);
 static int keybinding(uint32_t mods, xkb_keysym_t sym);
@@ -360,6 +361,7 @@ static struct wlr_cursor_shape_manager_v1 *cursor_shape_mgr;
 
 static struct wlr_cursor *cursor;
 static struct wlr_xcursor_manager *cursor_mgr;
+static int cursor_hidden;
 
 static struct wlr_session_lock_manager_v1 *session_lock_mgr;
 static struct wlr_scene_rect *locked_bg;
@@ -533,6 +535,8 @@ axisnotify(struct wl_listener *listener, void *data)
 	 * for example when you move the scroll wheel. */
 	struct wlr_pointer_axis_event *event = data;
 	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+	if(cursor_hidden)
+			hidecursor(0);
 	/* TODO: allow usage of scroll whell for mousebindings, it can be implemented
 	 * checking the event's orientation and the delta of the event */
 	/* Notify the client with pointer focus of the axis event. */
@@ -551,6 +555,8 @@ buttonpress(struct wl_listener *listener, void *data)
 	const Button *b;
 
 	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+	if(cursor_hidden)
+		hidecursor(0);
 
 	switch (event->state) {
 	case WLR_BUTTON_PRESSED:
@@ -1296,6 +1302,21 @@ fullscreennotify(struct wl_listener *listener, void *data)
 }
 
 void
+hidecursor(int hide)
+{
+	if (hide) {
+		// wlr_cursor_set_buffer(cursor, NULL, 0, 0, 0);
+		wlr_cursor_unset_image(cursor);
+		wlr_seat_pointer_notify_clear_focus(seat);
+		cursor_hidden = 1;
+		return;
+	}
+	wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
+	cursor_hidden = 0;
+	motionnotify(0);
+}
+
+void
 handlesig(int signo)
 {
 	if (signo == SIGCHLD) {
@@ -1419,6 +1440,8 @@ keypress(struct wl_listener *listener, void *data)
 	wlr_seat_set_keyboard(seat, kb->wlr_keyboard);
 	wlr_seat_keyboard_notify_key(seat, event->time_msec,
 		event->keycode, event->state);
+	if(hide_type)
+		hidecursor(1);
 }
 
 void
@@ -1622,6 +1645,8 @@ motionnotify(uint32_t time)
 	/* time is 0 in internal calls meant to restore pointer focus. */
 	if (time) {
 		wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+		if(cursor_hidden)
+			hidecursor(0);
 
 		/* Update selmon (even while dragging a window) */
 		if (sloppyfocus)
