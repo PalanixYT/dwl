@@ -287,7 +287,7 @@ static void quitsignal(int signo);
 static void rendermon(struct wl_listener *listener, void *data);
 static void requeststartdrag(struct wl_listener *listener, void *data);
 static void resize(Client *c, struct wlr_box geo, int interact);
-static void run(char *startup_cmd);
+static void run(char *startup_cmd, char *bar_cmd);
 static void setcursor(struct wl_listener *listener, void *data);
 static void setfloating(Client *c, int floating);
 static void setfullscreen(Client *c, int fullscreen);
@@ -323,6 +323,7 @@ static void zoom(const Arg *arg);
 static const char broken[] = "broken";
 static const char *cursor_image = "left_ptr";
 static pid_t child_pid = -1;
+static pid_t bar_pid = -1;
 static int locked;
 static void *exclusive_focus;
 static struct wl_display *dpy;
@@ -660,6 +661,10 @@ cleanup(void)
 	if (child_pid > 0) {
 		kill(child_pid, SIGTERM);
 		waitpid(child_pid, NULL, 0);
+	}
+	if (bar_pid > 0) {
+		kill(bar_pid, SIGTERM);
+		waitpid(bar_pid, NULL, 0);
 	}
 	wlr_backend_destroy(backend);
 	wlr_renderer_destroy(drw);
@@ -1935,7 +1940,7 @@ resize(Client *c, struct wlr_box geo, int interact)
 }
 
 void
-run(char *startup_cmd)
+run(char *startup_cmd, char *bar_cmd)
 {
 	/* Add a Unix socket to the Wayland display. */
 	const char *socket = wl_display_add_socket_auto(dpy);
@@ -1951,22 +1956,31 @@ run(char *startup_cmd)
 		die("startup: backend_start");
 
 	/* Now that the socket exists and the backend is started, run the startup command */
-	if (startup_cmd) {
+	if (bar_cmd) {
 		int piperw[2];
 		if (pipe(piperw) < 0)
 			die("startup: pipe:");
-		if ((child_pid = fork()) < 0)
+		if ((bar_pid = fork()) < 0)
 			die("startup: fork:");
-		if (child_pid == 0) {
+		if (bar_pid == 0) {
 			dup2(piperw[0], STDIN_FILENO);
 			close(piperw[0]);
 			close(piperw[1]);
-			execl("/bin/sh", "/bin/sh", "-c", startup_cmd, NULL);
+			execl("/bin/sh", "/bin/sh", "-c", bar_cmd, NULL);
 			die("startup: execl:");
 		}
 		dup2(piperw[1], STDOUT_FILENO);
 		close(piperw[1]);
 		close(piperw[0]);
+	}
+
+	if (startup_cmd) {
+		if ((child_pid = fork()) < 0)
+			die("startup: fork:");
+		if (child_pid == 0) {
+			execl("/bin/sh", "/bin/sh", "-c", startup_cmd, NULL);
+			die("startup: execl:");
+		}
 	}
 	/* If nobody is reading the status output, don't terminate */
 	sigaction(SIGPIPE, &sa, NULL);
@@ -2812,11 +2826,14 @@ int
 main(int argc, char *argv[])
 {
 	char *startup_cmd = NULL;
+	char *bar_cmd = NULL;
 	int c;
 
-	while ((c = getopt(argc, argv, "s:hv")) != -1) {
+	while ((c = getopt(argc, argv, "b:s:hv")) != -1) {
 		if (c == 's')
 			startup_cmd = optarg;
+    else if (c == 'b')
+      bar_cmd = optarg;
 		else if (c == 'v')
 			die("dwl " VERSION);
 		else
@@ -2829,7 +2846,7 @@ main(int argc, char *argv[])
 	if (!getenv("XDG_RUNTIME_DIR"))
 		die("XDG_RUNTIME_DIR must be set");
 	setup();
-	run(startup_cmd);
+	run(startup_cmd, bar_cmd);
 	cleanup();
 	return EXIT_SUCCESS;
 
