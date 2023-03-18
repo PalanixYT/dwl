@@ -106,19 +106,9 @@ automatically, you will need to configure it prior to launching `dwl`, e.g.:
 ### Status information
 
 Information about selected layouts, current window title, and
-selected/occupied/urgent tags is written to the stdin of the `-s` command (see
+selected/occupied/urgent tags is written to the stdin of the `-b` command (see
 the `printstatus()` function for details).  This information can be used to
 populate an external status bar with a script that parses the information.
-Failing to read this information will cause dwl to block, so if you do want to
-run a startup command that does not consume the status information, you can
-close standard input with the `<&-` shell redirection, for example:
-
-    dwl -s 'foot --server <&-'
-
-If your startup command is a shell script, you can achieve the same inside the
-script with the line
-
-    exec <&-
 
 To get a list of status bars that work with dwl consult our [wiki].
 
