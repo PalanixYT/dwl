@@ -212,6 +212,13 @@ typedef struct {
 } Rule;
 
 typedef struct {
+	const char *appid;
+	const char *title;
+	uint32_t mods;
+	uint32_t syms;
+} Shortcuts;
+
+typedef struct {
 	struct wlr_scene_tree *scene;
 
 	struct wlr_session_lock_v1 *lock;
@@ -279,6 +286,7 @@ static void moveresize(const Arg *arg);
 static void outputmgrapply(struct wl_listener *listener, void *data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
 static void outputmgrtest(struct wl_listener *listener, void *data);
+static void pass(const Arg *arg);
 static void pointerfocus(Client *c, struct wlr_surface *surface,
 		double sx, double sy, uint32_t time);
 static void printstatus(void);
@@ -1793,6 +1801,49 @@ outputmgrtest(struct wl_listener *listener, void *data)
 {
 	struct wlr_output_configuration_v1 *config = data;
 	outputmgrapplyortest(config, 1);
+}
+
+void
+pass(const Arg *arg)
+{
+	struct wlr_surface *oldsurface = seat->keyboard_state.focused_surface;
+	struct wlr_surface *newsurface = NULL;
+	Client *c;
+	const Shortcuts *shortcut = (const Shortcuts*)arg->v;
+
+	struct wlr_keyboard_modifiers mod = {
+	.depressed = shortcut->mods,
+	.group = 0,
+	.latched = 0,
+	.locked = 0,
+	};
+
+	/* match the client */
+	wl_list_for_each(c, &clients, link) {
+	if ((!shortcut->appid|| strstr(shortcut->appid, client_get_appid(c)))
+			&& (!shortcut->title || strstr(shortcut->title, client_get_title(c)))) {
+		newsurface = client_surface(c);
+		break;
+		}
+	}
+
+	if (newsurface) {
+		struct timespec now;
+		uint32_t time;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+
+		/* Switch to matched client and pass shortcut */
+		wlr_seat_keyboard_enter(seat, newsurface, NULL, 0, NULL);
+		wlr_seat_keyboard_send_modifiers(seat, &mod);
+		wlr_seat_keyboard_send_key(seat, time, shortcut->syms-8, WLR_BUTTON_PRESSED);
+		wlr_seat_keyboard_send_key(seat, time, shortcut->syms-8, WLR_BUTTON_RELEASED);
+
+		/* Give focus back to old client */
+		if (oldsurface) {
+			wlr_seat_keyboard_enter(seat, oldsurface, NULL, 0, NULL);
+		}
+	}
 }
 
 void
