@@ -2141,8 +2141,10 @@ setpsel(struct wl_listener *listener, void *data)
 	 * usually when the user copies something. wlroots allows compositors to
 	 * ignore such requests if they so choose, but in dwl we always honor
 	 */
-	struct wlr_seat_request_set_primary_selection_event *event = data;
-	wlr_seat_set_primary_selection(seat, event->source, event->serial);
+	// struct wlr_seat_request_set_primary_selection_event *event = data;
+	// wlr_seat_set_primary_selection(seat, event->source, event->serial);
+	// PATCH: Just do nothing here
+	return;
 }
 
 void
